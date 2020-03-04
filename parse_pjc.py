@@ -91,7 +91,7 @@ def main():
     try:
         HR=loadpjc_fromtxt(args.in_file)
     except IndexError:
-        print("loadpjc_fromtxt: Not results!")
+        print("loadpjc_fromtxt: No results!")
         sys.exit(0)
 
     print(HR)

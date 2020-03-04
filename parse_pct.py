@@ -90,7 +90,7 @@ def main():
         HR = loadpct_fromtxt(args.in_file)
         print(HR)
     except IndexError:
-        print("loadpct_fromtxt: Not results!")
+        print("loadpct_fromtxt: No results!")
         sys.exit(0)
 
     print(HR)
