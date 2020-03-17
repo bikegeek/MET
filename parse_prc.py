@@ -29,7 +29,7 @@ def is_numeric(s):
     except ValueError:
         return False
 
-def loadpjc_fromtxt(fname, pattern):
+def loadprc_fromtxt(fname, pattern):
     """
     Load PJC data from a text file.
 
@@ -64,8 +64,7 @@ def loadpjc_fromtxt(fname, pattern):
             pass
 
         print(data)
-        return data
-        #return [data[i]/(data[i]+data[i+1]) for i in range(0,len(colnas),2)]
+        return data[0::3], data[1::3], data[2::3]
 
 def to_iso8061_datetime(s):
     """Returns datetime from string in ISO8061 format."""
@@ -79,7 +78,7 @@ def main():
     parser.add_argument('valid_time', type=to_iso8061_datetime, help='YYYYMMDDTHHMMZ formatted date-time-group')
     parser.add_argument('fcst_time', type=to_iso8061_datetime, help='YYYYMMDDTHHMMZ formatted date-time-group')
     parser.add_argument('tau', type=int, help='TAU offset')
-    parser.add_argument('in_file', type=str, help='MET .pjc input file')
+    parser.add_argument('in_file', type=str, help='MET .prc input file')
     parser.add_argument('fcst_mdl', type=str, help='Forecast model name')
     parser.add_argument('anal_mdl', type=str, help='Analysis model name')
     parser.add_argument(
@@ -98,53 +97,44 @@ def main():
     logging.basicConfig(level=log_level, format=log_format)
 
     try:
-        pattern = re.compile(r"O[Y|N]_TP_\d+")
-        data=loadpjc_fromtxt(args.in_file, pattern)
-        HR = [data[i]/(data[i]+data[i+1]) for i in range(0,len(data),2)]
+        pattern = re.compile(r"(THRESH_\d+|PODY_\d+|POFD_\d+)")
+        THRESH,PODY,POFD=loadprc_fromtxt(args.in_file, pattern)
+        THRESH = THRESH[:-1]
     except IndexError:
-        print("loadpjc_fromtxt: {} Not results!".format(pattern.pattern))
+        print("loadprc_fromtxt: {} Not results!".format(pattern.pattern))
         sys.exit(0)
 
-    print(HR)
+    print(THRESH)
+    print(PODY)
+    print(POFD)
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
 
-    nthresh = len(HR)
+    nthresh = len(THRESH)
+    fig = plt.figure(figsize=(7,7))
+    plt.plot(POFD,PODY, '-r^', label='Treshold values')
+
     x=np.array([i/float(nthresh) for i in range(0,nthresh+1)])
-    plt.plot(x[1:],HR, '--ro', label='{}'.format(args.storm_id))
-    plt.plot(x,x, '--b')
-    plt.xlabel('Forecast probability ({})'.format(args.fcst_mdl))
-    plt.ylabel('Analysis ({})'.format(args.anal_mdl))
-    plt.legend(loc='upper left')
-    plt.title('Reliability Diagram Sig Wave Height GT 12-ft \nVT: {}; Forecast: {} Tau: {}'.format(args.valid_time, args.fcst_time, args.tau))
-    plt.savefig('{}_{}-{}_{}_{}_RD.png'.format(args.storm_id, args.fcst_mdl, args.anal_mdl, args.fcst_time.replace(' ', '_'), args.tau))
+    plt.plot(x, x, '--b', label='No Skill')
+    plt.text(0.,-0.2, 'Probability forecast : {}'.format(args.fcst_mdl), horizontalalignment='left')
+    plt.text(1.0,-0.2, 'Ground-truth : {}'.format(args.anal_mdl), horizontalalignment='right')
+    plt.text(0.8,1.0, '{}'.format(args.storm_id))
+    i=0
+    for x,y in zip(POFD,PODY):
+        label = "{:.1f}".format(THRESH[i])
+        plt.annotate(label, # this is the text
+                 (x,y), # this is the point to label
+                 textcoords="offset points", # how to position the text
+                 xytext=(5,-5), # distance from text to points (x,y)
+                 ha='left') # horizo
+        i = i + 1
 
-    plt.clf()
-
-    try:
-        pattern = re.compile(r"LIKELIHOOD_\d+")
-        LH=loadpjc_fromtxt(args.in_file, pattern)
-    except IndexError:
-        print("loadpjc_fromtxt: {} Not results!".format(pattern.pattern))
-        sys.exit(0)
-
-    print(LH)
-    print([1.0-oy for oy in LH])
-
-    width = .025
-    fig, ax = plt.subplots()
-    ax.bar(x[1:]-width/12,[1.0-oy for oy in LH], color='w', edgecolor='green', linewidth=1.5, width=-width, align='edge', label='Not observed')
-    ax.bar(x[1:]+width/12,LH, color='green', width=width, align='edge', label='Observed')
-    #plt.hist([1.0-oy for oy in LH], color='w', edgecolor='green', linewidth=1.5, label='Not observed')
-    #plt.hist(LH, color='green', label='Observed')
-    ax.set_xlabel('Forecast probability ({})'.format(args.fcst_mdl))
-    ax.set_ylabel('Likelihood')
-    ax.set_xticks(x)
-#    plt.yticks(np.sort(LH))
-    ax.legend(loc='upper right')
-    ax.set_title('Likelihood Sig Wave Height GT 12-ft \nVT: {}; Forecast: {} Tau: {}'.format(args.valid_time, args.fcst_time, args.tau))
-    fig.savefig('{}_{}-{}_{}_{}_LH.png'.format(args.storm_id, args.fcst_mdl, args.anal_mdl, args.fcst_time.replace(' ', '_'), args.tau))
+    plt.xlabel('False Alarm Rate')
+    plt.ylabel('Probability of Detection')
+    plt.legend(loc='lower right')
+    plt.title('Receiver Operating Characteristic Sig Wave Height GT 12-ft \nVT: {}; Forecast: {} Tau: {}'.format(args.valid_time, args.fcst_time, args.tau))
+    plt.savefig('{}_{}-{}_{}_{}_ROC.png'.format(args.storm_id, args.fcst_mdl, args.anal_mdl, args.fcst_time.replace(' ', '_'), args.tau))
 
 if __name__=="__main__":
     main()
